@@ -2,11 +2,16 @@ import { sql } from "@vercel/postgres";
 import { Analysis, AnalysisContext, AnalysisRecord, AnalysisStatus } from "../analysis/types";
 import { AnalysisStore } from "./types";
 
-const TABLE_NAME = process.env.ANALYSIS_TABLE_NAME || "analyses";
+const TABLE_NAME = sanitizeTableName(process.env.ANALYSIS_TABLE_NAME || "analyses");
+
+function sanitizeTableName(name: string): string {
+  // Allow alphanumeric and underscores only to avoid injection on identifiers.
+  return /^[A-Za-z0-9_]+$/.test(name) ? name : "analyses";
+}
 
 async function ensureTable() {
-  await sql`
-    CREATE TABLE IF NOT EXISTS ${sql.identifier([TABLE_NAME])} (
+  await sql.query(`
+    CREATE TABLE IF NOT EXISTS "${TABLE_NAME}" (
       id TEXT PRIMARY KEY,
       status TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL,
@@ -15,7 +20,7 @@ async function ensureTable() {
       analysis JSONB,
       error TEXT
     );
-  `;
+  `);
 }
 
 export class PostgresAnalysisStore implements AnalysisStore {
@@ -38,14 +43,17 @@ export class PostgresAnalysisStore implements AnalysisStore {
       updated_at: now,
       request: { topic, context },
     };
-    await sql`
-      INSERT INTO ${sql.identifier([TABLE_NAME])} (id, status, created_at, updated_at, request)
-      VALUES (${record.id}, ${record.status}, ${record.created_at}, ${record.updated_at}, ${record.request})
-      ON CONFLICT (id) DO UPDATE
-      SET status = EXCLUDED.status,
-          updated_at = EXCLUDED.updated_at,
-          request = EXCLUDED.request;
-    `;
+    await sql.query(
+      `
+        INSERT INTO "${TABLE_NAME}" (id, status, created_at, updated_at, request)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id) DO UPDATE
+        SET status = EXCLUDED.status,
+            updated_at = EXCLUDED.updated_at,
+            request = EXCLUDED.request;
+      `,
+      [record.id, record.status, record.created_at, record.updated_at, record.request]
+    );
     return record;
   }
 
@@ -59,13 +67,16 @@ export class PostgresAnalysisStore implements AnalysisStore {
       status,
       updated_at: new Date().toISOString(),
     };
-    await sql`
-      UPDATE ${sql.identifier([TABLE_NAME])}
-      SET status = ${updated.status},
-          updated_at = ${updated.updated_at},
-          analysis = ${updated.analysis}
-      WHERE id = ${id};
-    `;
+    await sql.query(
+      `
+        UPDATE "${TABLE_NAME}"
+        SET status = $1,
+            updated_at = $2,
+            analysis = $3
+        WHERE id = $4;
+      `,
+      [updated.status, updated.updated_at, updated.analysis ?? null, id]
+    );
     return updated;
   }
 
@@ -79,24 +90,30 @@ export class PostgresAnalysisStore implements AnalysisStore {
       error,
       updated_at: new Date().toISOString(),
     };
-    await sql`
-      UPDATE ${sql.identifier([TABLE_NAME])}
-      SET status = ${updated.status},
-          updated_at = ${updated.updated_at},
-          error = ${updated.error}
-      WHERE id = ${id};
-    `;
+    await sql.query(
+      `
+        UPDATE "${TABLE_NAME}"
+        SET status = $1,
+            updated_at = $2,
+            error = $3
+        WHERE id = $4;
+      `,
+      [updated.status, updated.updated_at, updated.error ?? null, id]
+    );
     return updated;
   }
 
   async getRecord(id: string): Promise<AnalysisRecord | undefined> {
     await this.ensure();
-    const result = await sql`
-      SELECT id, status, created_at, updated_at, request, analysis, error
-      FROM ${sql.identifier([TABLE_NAME])}
-      WHERE id = ${id}
-      LIMIT 1;
-    `;
+    const result = await sql.query(
+      `
+        SELECT id, status, created_at, updated_at, request, analysis, error
+        FROM "${TABLE_NAME}"
+        WHERE id = $1
+        LIMIT 1;
+      `,
+      [id]
+    );
     if (!result.rowCount) return undefined;
     const row = result.rows[0];
     return {
