@@ -6,7 +6,7 @@ const TABLE_NAME = process.env.ANALYSIS_TABLE_NAME || "analyses";
 
 async function ensureTable() {
   await sql`
-    CREATE TABLE IF NOT EXISTS ${sql.raw(TABLE_NAME)} (
+    CREATE TABLE IF NOT EXISTS ${sql.identifier([TABLE_NAME])} (
       id TEXT PRIMARY KEY,
       status TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL,
@@ -39,7 +39,7 @@ export class PostgresAnalysisStore implements AnalysisStore {
       request: { topic, context },
     };
     await sql`
-      INSERT INTO ${sql.raw(TABLE_NAME)} (id, status, created_at, updated_at, request)
+      INSERT INTO ${sql.identifier([TABLE_NAME])} (id, status, created_at, updated_at, request)
       VALUES (${record.id}, ${record.status}, ${record.created_at}, ${record.updated_at}, ${record.request})
       ON CONFLICT (id) DO UPDATE
       SET status = EXCLUDED.status,
@@ -60,7 +60,7 @@ export class PostgresAnalysisStore implements AnalysisStore {
       updated_at: new Date().toISOString(),
     };
     await sql`
-      UPDATE ${sql.raw(TABLE_NAME)}
+      UPDATE ${sql.identifier([TABLE_NAME])}
       SET status = ${updated.status},
           updated_at = ${updated.updated_at},
           analysis = ${updated.analysis}
@@ -80,7 +80,7 @@ export class PostgresAnalysisStore implements AnalysisStore {
       updated_at: new Date().toISOString(),
     };
     await sql`
-      UPDATE ${sql.raw(TABLE_NAME)}
+      UPDATE ${sql.identifier([TABLE_NAME])}
       SET status = ${updated.status},
           updated_at = ${updated.updated_at},
           error = ${updated.error}
@@ -93,7 +93,7 @@ export class PostgresAnalysisStore implements AnalysisStore {
     await this.ensure();
     const result = await sql`
       SELECT id, status, created_at, updated_at, request, analysis, error
-      FROM ${sql.raw(TABLE_NAME)}
+      FROM ${sql.identifier([TABLE_NAME])}
       WHERE id = ${id}
       LIMIT 1;
     `;
