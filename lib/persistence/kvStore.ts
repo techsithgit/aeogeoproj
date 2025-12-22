@@ -1,0 +1,57 @@
+import { kv } from "@vercel/kv";
+import { Analysis, AnalysisContext, AnalysisRecord, AnalysisStatus } from "../analysis/types";
+import { AnalysisStore } from "./types";
+
+const KV_PREFIX = process.env.ANALYSIS_KV_PREFIX || "analysis";
+
+function key(id: string) {
+  return `${KV_PREFIX}:${id}`;
+}
+
+export class VercelKVStore implements AnalysisStore {
+  async createRecord(id: string, topic: string, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
+    const now = new Date().toISOString();
+    const record: AnalysisRecord = {
+      id,
+      status,
+      created_at: now,
+      updated_at: now,
+      request: { topic, context },
+    };
+    await kv.set(key(id), record);
+    return record;
+  }
+
+  async saveAnalysis(id: string, analysis: Analysis, status: AnalysisStatus = "complete"): Promise<AnalysisRecord | undefined> {
+    const existing = await this.getRecord(id);
+    if (!existing) return undefined;
+    const updated: AnalysisRecord = {
+      ...existing,
+      analysis,
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    await kv.set(key(id), updated);
+    return updated;
+  }
+
+  async markFailed(id: string, error: string): Promise<AnalysisRecord | undefined> {
+    const existing = await this.getRecord(id);
+    if (!existing) return undefined;
+    const updated: AnalysisRecord = {
+      ...existing,
+      status: "failed",
+      error,
+      updated_at: new Date().toISOString(),
+    };
+    await kv.set(key(id), updated);
+    return updated;
+  }
+
+  async getRecord(id: string): Promise<AnalysisRecord | undefined> {
+    const record = await kv.get<AnalysisRecord>(key(id));
+    return record ?? undefined;
+  }
+}
+
+export const kvAnalysisStore = new VercelKVStore();
