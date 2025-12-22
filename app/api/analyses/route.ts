@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
     await store.saveAnalysis(id, analysis, "complete");
 
     return NextResponse.json({ analysis_id: id, status: "complete", analysis });
-  } catch (_error) {
-    return NextResponse.json({ error: "Unable to create analysis" }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to create analysis";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

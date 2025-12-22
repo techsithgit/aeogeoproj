@@ -8,8 +8,17 @@ function key(id: string) {
   return `${KV_PREFIX}:${id}`;
 }
 
+function validateKvEnv() {
+  const required = ["KV_URL", "KV_REST_API_URL", "KV_REST_API_TOKEN"];
+  const missing = required.filter((name) => !process.env[name]);
+  if (missing.length) {
+    throw new Error(`KV is not configured. Missing env vars: ${missing.join(", ")}`);
+  }
+}
+
 export class VercelKVStore implements AnalysisStore {
   async createRecord(id: string, topic: string, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
+    validateKvEnv();
     const now = new Date().toISOString();
     const record: AnalysisRecord = {
       id,
@@ -23,6 +32,7 @@ export class VercelKVStore implements AnalysisStore {
   }
 
   async saveAnalysis(id: string, analysis: Analysis, status: AnalysisStatus = "complete"): Promise<AnalysisRecord | undefined> {
+    validateKvEnv();
     const existing = await this.getRecord(id);
     if (!existing) return undefined;
     const updated: AnalysisRecord = {
@@ -36,6 +46,7 @@ export class VercelKVStore implements AnalysisStore {
   }
 
   async markFailed(id: string, error: string): Promise<AnalysisRecord | undefined> {
+    validateKvEnv();
     const existing = await this.getRecord(id);
     if (!existing) return undefined;
     const updated: AnalysisRecord = {
@@ -49,6 +60,7 @@ export class VercelKVStore implements AnalysisStore {
   }
 
   async getRecord(id: string): Promise<AnalysisRecord | undefined> {
+    validateKvEnv();
     const record = await kv.get<AnalysisRecord>(key(id));
     return record ?? undefined;
   }
