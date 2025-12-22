@@ -7,6 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "dev:4000": "bash -c \"(lsof -ti tcp:4000 | xargs kill -9 2>/dev/null || true); PORT=4000 next dev --hostname 127.0.0.1 --port 4000\"",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "samples": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/run-samples.ts"
   },
