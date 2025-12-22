@@ -15,12 +15,14 @@ function hasKvEnv() {
 }
 
 export function getAnalysisStore(): AnalysisStore {
-  const provider = (process.env.ANALYSIS_STORE_PROVIDER || "").toLowerCase();
+  const provider = (process.env.ANALYSIS_STORE_PROVIDER || "").trim().toLowerCase();
   if (provider === "postgres") {
     return postgresAnalysisStore;
   }
   if (provider === "kv") {
-    return kvAnalysisStore;
+    if (hasKvEnv()) return kvAnalysisStore;
+    if (hasPostgresEnv()) return postgresAnalysisStore;
+    return fileAnalysisStore;
   }
 
   // Autodetect if no explicit provider set.
