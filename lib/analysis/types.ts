@@ -1,7 +1,7 @@
-export type AnalysisVersion = "v1";
+export type AnalysisVersion = "v1" | "v2";
 
 export type AnalysisSource = {
-  type: "topic";
+  type: "topic" | "url";
   value: string;
 };
 
@@ -47,6 +47,21 @@ export type ScoreExplanation = {
   message: string;
 };
 
+export type ExtractionContent = {
+  title?: string;
+  description?: string;
+  headings?: string[];
+  main_text?: string;
+};
+
+export type AnalysisExtraction = {
+  status: "success" | "partial" | "failed";
+  fetched_url: string;
+  http_status?: number;
+  content: ExtractionContent;
+  warnings?: string[];
+};
+
 export type AnalysisScoring = {
   aeo_score: number;
   score_explanations: ScoreExplanation[];
@@ -59,6 +74,7 @@ export type Analysis = {
   updated_at: string;
   source: AnalysisSource;
   context: AnalysisContext;
+  extraction?: AnalysisExtraction;
   prompt_intelligence: PromptIntelligence;
   aeo: AEOAssessment;
   diagnosis: {
@@ -78,7 +94,7 @@ export type AnalysisRecord = {
   created_at: string;
   updated_at: string;
   request: {
-    topic: string;
+    source: AnalysisSource;
     context: AnalysisContext;
   };
   analysis?: Analysis;

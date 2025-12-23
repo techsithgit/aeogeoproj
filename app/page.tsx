@@ -7,10 +7,13 @@ type AnalysisResponse = {
   status?: string;
   analysis?: unknown;
   error?: string;
+  details?: unknown;
 };
 
 export default function Home() {
+  const [mode, setMode] = useState<"topic" | "url">("topic");
   const [topic, setTopic] = useState("");
+  const [url, setUrl] = useState("");
   const [location, setLocation] = useState("");
   const [industry, setIndustry] = useState("");
   const [result, setResult] = useState<AnalysisResponse | null>(null);
@@ -25,11 +28,16 @@ export default function Home() {
     if (location.trim()) context.location = location.trim();
     if (industry.trim()) context.industry = industry.trim();
 
+    const source =
+      mode === "url"
+        ? { type: "url", value: url.trim() }
+        : { type: "topic", value: topic.trim() };
+
     const response = await fetch("/api/analyses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        topic,
+        source,
         context,
       }),
     });
@@ -54,11 +62,22 @@ export default function Home() {
 
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
         <label>
-          Topic
+          Source type
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as "topic" | "url")}
+            style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+          >
+            <option value="topic">Topic</option>
+            <option value="url">URL</option>
+          </select>
+        </label>
+        <label>
+          {mode === "url" ? "URL" : "Topic"}
           <input
             type="text"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
+            value={mode === "url" ? url : topic}
+            onChange={(e) => (mode === "url" ? setUrl(e.target.value) : setTopic(e.target.value))}
             required
             style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
           />

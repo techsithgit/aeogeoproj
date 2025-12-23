@@ -1,5 +1,5 @@
 import { kv } from "@vercel/kv";
-import { Analysis, AnalysisContext, AnalysisRecord, AnalysisStatus } from "../analysis/types";
+import { Analysis, AnalysisContext, AnalysisRecord, AnalysisSource, AnalysisStatus } from "../analysis/types";
 import { AnalysisStore } from "./types";
 
 const KV_PREFIX = process.env.ANALYSIS_KV_PREFIX || "analysis";
@@ -17,7 +17,7 @@ function validateKvEnv() {
 }
 
 export class VercelKVStore implements AnalysisStore {
-  async createRecord(id: string, topic: string, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
+  async createRecord(id: string, source: AnalysisSource, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
     validateKvEnv();
     const now = new Date().toISOString();
     const record: AnalysisRecord = {
@@ -25,7 +25,7 @@ export class VercelKVStore implements AnalysisStore {
       status,
       created_at: now,
       updated_at: now,
-      request: { topic, context },
+      request: { source, context },
     };
     await kv.set(key(id), record);
     return record;

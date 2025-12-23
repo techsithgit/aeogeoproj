@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { Analysis, AnalysisContext, AnalysisRecord, AnalysisStatus } from "../analysis/types";
+import { Analysis, AnalysisContext, AnalysisRecord, AnalysisSource, AnalysisStatus } from "../analysis/types";
 import { AnalysisStore } from "./types";
 
 const primaryStorePath =
@@ -63,7 +63,7 @@ function syncMemoryFromDisk() {
 syncMemoryFromDisk();
 
 export class FileAnalysisStore implements AnalysisStore {
-  async createRecord(id: string, topic: string, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
+  async createRecord(id: string, source: AnalysisSource, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
     const now = new Date().toISOString();
     const record: AnalysisRecord = {
       id,
@@ -71,7 +71,7 @@ export class FileAnalysisStore implements AnalysisStore {
       created_at: now,
       updated_at: now,
       request: {
-        topic,
+        source,
         context,
       },
     };

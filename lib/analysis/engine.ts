@@ -2,14 +2,16 @@ import crypto from "crypto";
 import {
   Analysis,
   AnalysisContext,
+  AnalysisExtraction,
   AnalysisScoring,
+  AnalysisSource,
   AnalysisVersion,
   DiagnosisReason,
   PromptCluster,
   RecommendedFix,
 } from "./types";
 
-const ANALYSIS_VERSION: AnalysisVersion = "v1";
+const ANALYSIS_VERSION: AnalysisVersion = "v2";
 
 type TopicSignals = {
   normalized: string;
@@ -98,7 +100,7 @@ function buildPromptClusters(signals: TopicSignals, context: AnalysisContext): P
   return clusters;
 }
 
-function scoreClarity(signals: TopicSignals): number {
+function scoreClarity(signals: TopicSignals, contentSignals: ContentSignals): number {
   let score = 78;
   if (signals.words.length < 3) score -= 25;
   if (signals.words.length >= 6 && signals.words.length <= 12) score += 8;
@@ -106,6 +108,7 @@ function scoreClarity(signals: TopicSignals): number {
   if (signals.hasComparison || signals.hasBestSuperlative) score += 6;
   if (signals.hasTransactionalCue) score += 6;
   if (signals.hasGeoCue && signals.words.length < 4) score -= 4;
+  if (contentSignals.mainTextLength > 0 && contentSignals.mainTextLength < 200) score -= 8;
 
   return Math.min(100, Math.max(0, score));
 }
@@ -117,7 +120,12 @@ function deriveAnswerPresence(signals: TopicSignals): "missing" | "partial" | "c
   return "missing";
 }
 
-function gatherStructureIssues(signals: TopicSignals, context: AnalysisContext): string[] {
+function gatherStructureIssues(
+  signals: TopicSignals,
+  context: AnalysisContext,
+  contentSignals: ContentSignals,
+  extraction?: AnalysisExtraction
+): string[] {
   const issues: string[] = [];
   if (!signals.hasQuestionWord && !signals.hasQuestionMark) {
     issues.push("Topic is not framed as a direct ask, so the AI must infer the question.");
@@ -134,10 +142,28 @@ function gatherStructureIssues(signals: TopicSignals, context: AnalysisContext):
   if (!context.industry && !signals.hasTransactionalCue) {
     issues.push("No industry or domain anchor is provided.");
   }
+  if (extraction) {
+    if (contentSignals.mainTextLength === 0) {
+      issues.push("Extracted page content is empty, so answers may be speculative.");
+    } else if (contentSignals.mainTextLength < 200) {
+      issues.push("Extracted page content is very short, reducing answer confidence.");
+    }
+    if (contentSignals.headingsCount === 0) {
+      issues.push("Page lacks clear headings (H1–H3), weakening structure for answers.");
+    }
+    if (contentSignals.hasPaywallSignals) {
+      issues.push("Page may be paywalled, limiting visible content for analysis.");
+    }
+  }
   return issues;
 }
 
-function buildReasons(signals: TopicSignals, context: AnalysisContext): DiagnosisReason[] {
+function buildReasons(
+  signals: TopicSignals,
+  context: AnalysisContext,
+  contentSignals: ContentSignals,
+  extraction?: AnalysisExtraction
+): DiagnosisReason[] {
   const reasons: DiagnosisReason[] = [];
   const intent = deriveIntent(signals);
 
@@ -184,6 +210,27 @@ function buildReasons(signals: TopicSignals, context: AnalysisContext): Diagnosi
     });
   }
 
+  if (extraction) {
+    if (contentSignals.mainTextLength < 200) {
+      reasons.push({
+        id: "reason_5",
+        title: "Thin on-page content",
+        detail: "Extracted content is short or incomplete, so AI cannot ground the answer well.",
+        severity: contentSignals.mainTextLength === 0 ? "high" : "medium",
+        rank: reasons.length + 1,
+      });
+    }
+    if (contentSignals.headingsCount === 0) {
+      reasons.push({
+        id: "reason_6",
+        title: "Missing headings",
+        detail: "The page lacks clear headings (H1–H3), so structure and intent are unclear.",
+        severity: "medium",
+        rank: reasons.length + 1,
+      });
+    }
+  }
+
   return reasons.slice(0, 5);
 }
 
@@ -228,10 +275,28 @@ function buildFixes(reasons: DiagnosisReason[]): RecommendedFix[] {
     });
   }
 
+  if (reasonIds.has("reason_5")) {
+    fixes.push({
+      id: "fix_5",
+      description: "Add more descriptive body content that directly answers the query with clear evidence.",
+      why_it_matters: "Richer on-page detail lets AI ground answers instead of guessing.",
+      maps_to_reason_ids: ["reason_5"],
+    });
+  }
+
+  if (reasonIds.has("reason_6")) {
+    fixes.push({
+      id: "fix_6",
+      description: "Add H1–H3 headings that clarify the question and key sections users need.",
+      why_it_matters: "Headings guide the AI to the right sections and reduce ambiguity.",
+      maps_to_reason_ids: ["reason_6"],
+    });
+  }
+
   return fixes;
 }
 
-function scoreAnalysis(reasons: DiagnosisReason[], clarityScore: number): AnalysisScoring {
+function scoreAnalysis(reasons: DiagnosisReason[], clarityScore: number, extraction?: AnalysisExtraction): AnalysisScoring {
   let score = 85;
   const explanation: string[] = [];
 
@@ -243,6 +308,11 @@ function scoreAnalysis(reasons: DiagnosisReason[], clarityScore: number): Analys
 
   score += Math.round((clarityScore - 60) / 4);
 
+  if (extraction?.status === "partial") {
+    score -= 8;
+    explanation.push("Extraction was partial, so answers may be less grounded.");
+  }
+
   return {
     aeo_score: Math.max(0, Math.min(100, score)),
     score_explanations: explanation.map((message, idx) => ({
@@ -252,16 +322,43 @@ function scoreAnalysis(reasons: DiagnosisReason[], clarityScore: number): Analys
   };
 }
 
-export function generateAnalysis(id: string, topic: string, context: AnalysisContext = {}): Analysis {
-  const signals = extractSignals(topic);
+type ContentSignals = {
+  mainTextLength: number;
+  headingsCount: number;
+  hasPaywallSignals: boolean;
+};
+
+function deriveContentSignals(extraction?: AnalysisExtraction): ContentSignals {
+  const mainText = extraction?.content.main_text ?? "";
+  const headings = extraction?.content.headings ?? [];
+  const textLower = mainText.toLowerCase();
+  const paywallCues = ["subscribe", "sign in to read", "paywall", "membership", "log in to continue"];
+  const hasPaywallSignals = paywallCues.some((cue) => textLower.includes(cue));
+  return {
+    mainTextLength: mainText.trim().length,
+    headingsCount: headings.length,
+    hasPaywallSignals,
+  };
+}
+
+export function generateAnalysis(params: {
+  id: string;
+  source: AnalysisSource;
+  topicHint: string;
+  context?: AnalysisContext;
+  extraction?: AnalysisExtraction;
+}): Analysis {
+  const { id, source, topicHint, context = {}, extraction } = params;
+  const signals = extractSignals(topicHint);
+  const contentSignals = deriveContentSignals(extraction);
   const intent = deriveIntent(signals);
   const promptClusters = buildPromptClusters(signals, context);
-  const clarity = scoreClarity(signals);
+  const clarity = scoreClarity(signals, contentSignals);
   const answerPresence = deriveAnswerPresence(signals);
-  const structureIssues = gatherStructureIssues(signals, context);
-  const reasons = buildReasons(signals, context);
+  const structureIssues = gatherStructureIssues(signals, context, contentSignals, extraction);
+  const reasons = buildReasons(signals, context, contentSignals, extraction);
   const fixes = buildFixes(reasons);
-  const scoring = scoreAnalysis(reasons, clarity);
+  const scoring = scoreAnalysis(reasons, clarity, extraction);
   const now = new Date().toISOString();
 
   return {
@@ -269,11 +366,9 @@ export function generateAnalysis(id: string, topic: string, context: AnalysisCon
     analysis_version: ANALYSIS_VERSION,
     created_at: now,
     updated_at: now,
-    source: {
-      type: "topic",
-      value: topic,
-    },
+    source,
     context,
+    extraction,
     prompt_intelligence: {
       dominant_intent: intent,
       intent_mismatch:

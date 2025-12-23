@@ -1,5 +1,5 @@
 import { sql } from "@vercel/postgres";
-import { Analysis, AnalysisContext, AnalysisRecord, AnalysisStatus } from "../analysis/types";
+import { Analysis, AnalysisContext, AnalysisRecord, AnalysisSource, AnalysisStatus } from "../analysis/types";
 import { AnalysisStore } from "./types";
 
 const TABLE_NAME = sanitizeTableName(process.env.ANALYSIS_TABLE_NAME || "analyses");
@@ -33,7 +33,7 @@ export class PostgresAnalysisStore implements AnalysisStore {
     }
   }
 
-  async createRecord(id: string, topic: string, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
+  async createRecord(id: string, source: AnalysisSource, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
     await this.ensure();
     const now = new Date().toISOString();
     const record: AnalysisRecord = {
@@ -41,7 +41,7 @@ export class PostgresAnalysisStore implements AnalysisStore {
       status,
       created_at: now,
       updated_at: now,
-      request: { topic, context },
+      request: { source, context },
     };
     await sql.query(
       `
