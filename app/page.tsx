@@ -16,6 +16,7 @@ export default function Home() {
   const [url, setUrl] = useState("");
   const [location, setLocation] = useState("");
   const [industry, setIndustry] = useState("");
+  const [includeDifferentiators, setIncludeDifferentiators] = useState(false);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -39,6 +40,7 @@ export default function Home() {
       body: JSON.stringify({
         source,
         context,
+        include_differentiators: includeDifferentiators,
       }),
     });
 
@@ -99,6 +101,14 @@ export default function Home() {
             onChange={(e) => setIndustry(e.target.value)}
             style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
           />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            type="checkbox"
+            checked={includeDifferentiators}
+            onChange={(e) => setIncludeDifferentiators(e.target.checked)}
+          />
+          Include differentiators
         </label>
         <button type="submit" style={{ padding: "0.6rem 1rem" }}>
           {loading ? "Running..." : "Run analysis"}

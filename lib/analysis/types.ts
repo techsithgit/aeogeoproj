@@ -67,9 +67,59 @@ export type AnalysisScoring = {
   score_explanations: ScoreExplanation[];
 };
 
+export type AnalysisRunStatus = "complete" | "failed";
+
+export type DifferentiatorAnswerFragility = {
+  status: "stable" | "at_risk" | "fragile";
+  fragility_score: number; // 0-100
+  drivers: {
+    driver_type: string;
+    explanation: string;
+    related_reason_ids?: string[];
+  }[];
+};
+
+export type CitationProfile = {
+  current_type: "authority" | "list" | "example" | "definition";
+  confidence_level: "low" | "medium" | "high";
+  requirements_to_upgrade: {
+    target_type: "authority" | "list" | "example" | "definition";
+    missing_signals: string[];
+  }[];
+};
+
+export type FirstPartySignals = {
+  presence: "none" | "weak" | "strong";
+  detected_types: ("original_data" | "lived_experience" | "proprietary_framework" | "unique_examples")[];
+  gaps: string[];
+};
+
+export type GeoSensitivity = {
+  level: "low" | "medium" | "high";
+  explanation: string;
+  implications: "global_authority_sufficient" | "local_context_required";
+};
+
+export type FixPriority = {
+  ordered_fixes: {
+    fix_id: string;
+    priority: "now" | "next" | "later";
+    rationale: string;
+  }[];
+};
+
+export type AnalysisDifferentiators = {
+  answer_fragility?: DifferentiatorAnswerFragility;
+  citation_profile?: CitationProfile;
+  first_party_signals?: FirstPartySignals;
+  geo_sensitivity?: GeoSensitivity;
+  fix_priority?: FixPriority;
+};
+
 export type Analysis = {
   id: string;
   analysis_version: AnalysisVersion;
+  status: AnalysisRunStatus;
   created_at: string;
   updated_at: string;
   source: AnalysisSource;
@@ -84,6 +134,7 @@ export type Analysis = {
     recommended_fixes: RecommendedFix[];
   };
   scoring: AnalysisScoring;
+  differentiators?: AnalysisDifferentiators;
 };
 
 export type AnalysisStatus = "queued" | "processing" | "complete" | "failed";
@@ -96,6 +147,7 @@ export type AnalysisRecord = {
   request: {
     source: AnalysisSource;
     context: AnalysisContext;
+    include_differentiators?: boolean;
   };
   analysis?: Analysis;
   error?: string;

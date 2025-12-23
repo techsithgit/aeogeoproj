@@ -5,6 +5,7 @@ import {
   AnalysisExtraction,
   AnalysisScoring,
   AnalysisSource,
+  AnalysisDifferentiators,
   AnalysisVersion,
   DiagnosisReason,
   PromptCluster,
@@ -322,6 +323,206 @@ function scoreAnalysis(reasons: DiagnosisReason[], clarityScore: number, extract
   };
 }
 
+function detectFirstPartySignals(extraction?: AnalysisExtraction): {
+  presence: "none" | "weak" | "strong";
+  detected_types: ("original_data" | "lived_experience" | "proprietary_framework" | "unique_examples")[];
+  gaps: string[];
+} {
+  if (!extraction || extraction.status === "failed") {
+    return { presence: "none", detected_types: [], gaps: ["No extracted content to assess first-party signals."] };
+  }
+  const text = (extraction.content.main_text || "").toLowerCase();
+  const headings = (extraction.content.headings || []).map((h) => h.toLowerCase());
+  const detected: ("original_data" | "lived_experience" | "proprietary_framework" | "unique_examples")[] = [];
+  const gaps: string[] = [];
+
+  if (/\bwe (conducted|ran|surveyed|measured|tested)\b/.test(text) || /\bdata\b/.test(text)) {
+    detected.push("original_data");
+  }
+  if (/\bwe (built|created|developed)\b/.test(text) && /\bframework\b/.test(text)) {
+    detected.push("proprietary_framework");
+  }
+  if (/\bmy experience\b|\bour experience\b|\bwe learned\b/.test(text)) {
+    detected.push("lived_experience");
+  }
+  if (headings.some((h) => /case study|example|examples|lessons/.test(h)) || /\bfor example\b|\bfor instance\b/.test(text)) {
+    detected.push("unique_examples");
+  }
+
+  let presence: "none" | "weak" | "strong" = "none";
+  if (detected.length === 0) {
+    gaps.push("Add first-party signals (data, case examples, frameworks).");
+  } else if (detected.length === 1) {
+    presence = "weak";
+    gaps.push("Expand first-party signals beyond a single mention.");
+  } else {
+    presence = "strong";
+  }
+
+  return { presence, detected_types: detected, gaps };
+}
+
+function classifyCitationProfile(extraction?: AnalysisExtraction): {
+  current_type: "authority" | "list" | "example" | "definition";
+  confidence_level: "low" | "medium" | "high";
+  requirements_to_upgrade: { target_type: "authority" | "list" | "example" | "definition"; missing_signals: string[] }[];
+} {
+  const text = (extraction?.content.main_text || "").toLowerCase();
+  const headings = (extraction?.content.headings || []).map((h) => h.toLowerCase());
+
+  let current_type: "authority" | "list" | "example" | "definition" = "definition";
+  let confidence: "low" | "medium" | "high" = "low";
+  const missingForAuthority: string[] = [];
+  const missingForList: string[] = [];
+
+  const hasDefinitionTone = /\bis\s|\bare\s|\brefers to\b/.test(text.slice(0, 200));
+  const hasListSignals = headings.some((h) => /top|best|list|vs|versus/.test(h)) || /\b\d+\./.test(text);
+  const hasRecommendation = /\bshould\b|\brecommend\b|\bbest\b|\bchoose\b/.test(text);
+  const hasCriteria = /\bbecause\b|\bdue to\b|\bbased on\b/.test(text) || /criteria|factors/.test(text);
+
+  if (hasListSignals) {
+    current_type = "list";
+    confidence = "medium";
+  }
+  if (hasRecommendation && hasCriteria) {
+    current_type = "authority";
+    confidence = "high";
+  } else if (hasRecommendation) {
+    current_type = "authority";
+    confidence = "medium";
+  } else if (hasDefinitionTone) {
+    current_type = "definition";
+    confidence = "medium";
+  }
+  if (/\bfor example\b|\bfor instance\b/.test(text)) {
+    current_type = "example";
+    confidence = "medium";
+  }
+
+  if (!hasCriteria) missingForAuthority.push("State explicit criteria or justification for recommendations.");
+  if (!hasRecommendation) missingForAuthority.push("Provide a clear recommendation or decisive stance.");
+  if (!hasListSignals) missingForList.push("Use clear list structure or headings (Top/Best) to signal a list answer.");
+
+  return {
+    current_type,
+    confidence_level: confidence,
+    requirements_to_upgrade: [
+      { target_type: "authority", missing_signals: missingForAuthority },
+      { target_type: "list", missing_signals: missingForList },
+    ],
+  };
+}
+
+function deriveFragility(
+  firstParty: ReturnType<typeof detectFirstPartySignals>,
+  reasons: DiagnosisReason[],
+  extraction?: AnalysisExtraction
+): { status: "stable" | "at_risk" | "fragile"; fragility_score: number; drivers: { driver_type: string; explanation: string; related_reason_ids?: string[] }[] } {
+  let score = 70;
+  const drivers: { driver_type: string; explanation: string; related_reason_ids?: string[] }[] = [];
+
+  if (firstParty.presence === "none") {
+    score -= 20;
+    drivers.push({
+      driver_type: "first_party_absent",
+      explanation: "No first-party signals detected, so answers rely on generic knowledge.",
+      related_reason_ids: reasons.map((r) => r.id),
+    });
+  } else if (firstParty.presence === "weak") {
+    score -= 10;
+    drivers.push({
+      driver_type: "first_party_weak",
+      explanation: "Only limited first-party signals detected, reducing authority.",
+      related_reason_ids: reasons.map((r) => r.id),
+    });
+  }
+
+  if (extraction?.status === "partial") {
+    score -= 10;
+    drivers.push({
+      driver_type: "extraction_partial",
+      explanation: "Extraction was partial, so evidence may be incomplete.",
+    });
+  }
+
+  const highReasons = reasons.filter((r) => r.severity === "high").map((r) => r.id);
+  if (highReasons.length) {
+    score -= 8;
+    drivers.push({
+      driver_type: "blocking_reasons",
+      explanation: "Blocking reasons remain unresolved, increasing fragility.",
+      related_reason_ids: highReasons,
+    });
+  }
+
+  const status = score >= 70 ? "stable" : score >= 45 ? "at_risk" : "fragile";
+  return { status, fragility_score: Math.max(0, Math.min(100, score)), drivers };
+}
+
+function deriveGeoSensitivity(
+  signals: TopicSignals,
+  extraction?: AnalysisExtraction
+): { level: "low" | "medium" | "high"; explanation: string; implications: "global_authority_sufficient" | "local_context_required" } {
+  const text = (extraction?.content.main_text || "").toLowerCase();
+  const headings = (extraction?.content.headings || []).map((h) => h.toLowerCase());
+  const hasLocationWords = signals.hasGeoCue || /near me|in [A-Za-z]|city|state|province/.test(text) || headings.some((h) => /near|in\b/.test(h));
+  if (hasLocationWords) {
+    return {
+      level: "medium",
+      explanation: "Prompt or content includes location-sensitive language, so local context matters.",
+      implications: "local_context_required",
+    };
+  }
+  return {
+    level: "low",
+    explanation: "No strong geo cues detected; global authority may suffice.",
+    implications: "global_authority_sufficient",
+  };
+}
+
+function deriveFixPriority(fixes: RecommendedFix[], reasons: DiagnosisReason[]): { ordered_fixes: { fix_id: string; priority: "now" | "next" | "later"; rationale: string }[] } {
+  const reasonSeverity = new Map(reasons.map((r) => [r.id, r.severity]));
+  const ordered = fixes.map((fix) => {
+    const hasHigh = fix.maps_to_reason_ids.some((r) => reasonSeverity.get(r) === "high");
+    const hasMedium = fix.maps_to_reason_ids.some((r) => reasonSeverity.get(r) === "medium");
+    const priority: "now" | "next" | "later" = hasHigh ? "now" : hasMedium ? "next" : "later";
+    const rationale = hasHigh
+      ? "Addresses a high-severity blocker."
+      : hasMedium
+      ? "Addresses a medium-severity blocker."
+      : "Addresses a lower-severity issue.";
+    return { fix_id: fix.id, priority, rationale };
+  });
+  ordered.sort((a, b) => {
+    const order = { now: 0, next: 1, later: 2 };
+    return order[a.priority] - order[b.priority];
+  });
+  return { ordered_fixes: ordered };
+}
+
+function buildDifferentiators(
+  reasons: DiagnosisReason[],
+  fixes: RecommendedFix[],
+  extraction: AnalysisExtraction | undefined,
+  signals: TopicSignals,
+  _context: AnalysisContext,
+  _contentSignals: ContentSignals
+): AnalysisDifferentiators {
+  const firstParty = detectFirstPartySignals(extraction);
+  const citation = classifyCitationProfile(extraction);
+  const fragility = deriveFragility(firstParty, reasons, extraction);
+  const geo = deriveGeoSensitivity(signals, extraction);
+  const fixPriority = deriveFixPriority(fixes, reasons);
+
+  return {
+    answer_fragility: fragility,
+    citation_profile: citation,
+    first_party_signals: firstParty,
+    geo_sensitivity: geo,
+    fix_priority: fixPriority,
+  };
+}
+
 type ContentSignals = {
   mainTextLength: number;
   headingsCount: number;
@@ -347,8 +548,9 @@ export function generateAnalysis(params: {
   topicHint: string;
   context?: AnalysisContext;
   extraction?: AnalysisExtraction;
+  includeDifferentiators?: boolean;
 }): Analysis {
-  const { id, source, topicHint, context = {}, extraction } = params;
+  const { id, source, topicHint, context = {}, extraction, includeDifferentiators } = params;
   const signals = extractSignals(topicHint);
   const contentSignals = deriveContentSignals(extraction);
   const intent = deriveIntent(signals);
@@ -359,11 +561,15 @@ export function generateAnalysis(params: {
   const reasons = buildReasons(signals, context, contentSignals, extraction);
   const fixes = buildFixes(reasons);
   const scoring = scoreAnalysis(reasons, clarity, extraction);
+  const differentiators = includeDifferentiators
+    ? buildDifferentiators(reasons, fixes, extraction, signals, context, contentSignals)
+    : undefined;
   const now = new Date().toISOString();
 
   return {
     id,
     analysis_version: ANALYSIS_VERSION,
+    status: "complete",
     created_at: now,
     updated_at: now,
     source,
@@ -391,6 +597,7 @@ export function generateAnalysis(params: {
       recommended_fixes: fixes,
     },
     scoring,
+    differentiators,
   };
 }
 

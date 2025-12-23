@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
     const id = createAnalysisId();
     const store = getAnalysisStore();
 
+    const includeDifferentiators = Boolean(body?.include_differentiators);
+
     await store.createRecord(id, source, context, "processing");
 
     let extraction;
@@ -38,7 +40,10 @@ export async function POST(request: NextRequest) {
       extraction = await extractFromUrl(source.value);
       if (extraction.status === "failed") {
         await store.markFailed(id, extraction.warnings?.[0] ?? "Extraction failed");
-        return NextResponse.json({ error: "Extraction failed", details: extraction.warnings }, { status: 500 });
+        return NextResponse.json(
+          { error: "Extraction failed", details: extraction.warnings ?? ["Extraction failed"] },
+          { status: 500 }
+        );
       }
     }
 
@@ -56,6 +61,7 @@ export async function POST(request: NextRequest) {
       topicHint,
       context,
       extraction,
+      includeDifferentiators,
     });
     await store.saveAnalysis(id, analysis, "complete");
 

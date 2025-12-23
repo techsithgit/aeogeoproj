@@ -70,15 +70,31 @@ function extractMainText(html: string): string {
   return decodeHtmlEntities(text);
 }
 
-function computeExtractionStatus(mainText: string, headings: string[], warnings: string[]): "success" | "partial" | "failed" {
-  if (!mainText || mainText.length < 80) return "failed";
+function computeExtractionStatus(
+  mainText: string,
+  headings: string[],
+  warnings: string[],
+  htmlLength: number,
+  httpStatus?: number | null
+): "success" | "partial" | "failed" {
+  if (httpStatus && httpStatus >= 400) {
+    warnings.push(`HTTP status ${httpStatus} indicates failure.`);
+    return "failed";
+  }
+  const length = mainText.trim().length;
+  if (!mainText || length < 120) return "failed";
+
   let status: "success" | "partial" = "success";
-  if (mainText.length < 200) {
+  if (length < 300) {
     warnings.push("Extracted content is very short.");
     status = "partial";
   }
   if (headings.length === 0) {
     warnings.push("No H1–H3 headings were extracted.");
+    status = "partial";
+  }
+  if (htmlLength > 20000 && length < 500) {
+    warnings.push("Page may be JS-rendered or gated; visible text is limited.");
     status = "partial";
   }
   return status;
@@ -112,14 +128,17 @@ export async function extractFromUrl(rawUrl: string): Promise<AnalysisExtraction
     const description = extractBetween(fetchResult.body, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
     const headings = extractHeadings(fetchResult.body);
     const main_text = extractMainText(fetchResult.body);
+    const htmlLength = fetchResult.body.length;
 
     const paywallCues = ["subscribe", "sign in to read", "paywall", "log in to continue"];
     const lowerText = main_text.toLowerCase();
     if (paywallCues.some((cue) => lowerText.includes(cue))) {
       warnings.push("Page may be paywalled or gated.");
     }
+    if (!title) warnings.push("No <title> tag was extracted.");
+    if (!description) warnings.push("No meta description was extracted.");
 
-    const status = computeExtractionStatus(main_text, headings, warnings);
+    const status = computeExtractionStatus(main_text, headings, warnings, htmlLength, fetchResult.status);
 
     return {
       status,
