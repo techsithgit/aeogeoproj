@@ -14,24 +14,22 @@ function hasKvEnv() {
   return Boolean(process.env.KV_URL && process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 }
 
-export function getAnalysisStore(): AnalysisStore {
+export function getProviderName(): "postgres" | "kv" | "file" {
   const provider = (process.env.ANALYSIS_STORE_PROVIDER || "").trim().toLowerCase();
-  if (provider === "postgres") {
-    return postgresAnalysisStore;
-  }
+  if (provider === "postgres") return "postgres";
   if (provider === "kv") {
-    if (hasKvEnv()) return kvAnalysisStore;
-    if (hasPostgresEnv()) return postgresAnalysisStore;
-    return fileAnalysisStore;
+    if (hasKvEnv()) return "kv";
+    if (hasPostgresEnv()) return "postgres";
+    return "file";
   }
+  if (hasPostgresEnv()) return "postgres";
+  if (hasKvEnv()) return "kv";
+  return "file";
+}
 
-  // Autodetect if no explicit provider set.
-  if (hasPostgresEnv()) {
-    return postgresAnalysisStore;
-  }
-  if (hasKvEnv()) {
-    return kvAnalysisStore;
-  }
-
+export function getAnalysisStore(): AnalysisStore {
+  const provider = getProviderName();
+  if (provider === "postgres") return postgresAnalysisStore;
+  if (provider === "kv") return kvAnalysisStore;
   return fileAnalysisStore;
 }
