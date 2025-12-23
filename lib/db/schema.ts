@@ -49,4 +49,27 @@ export async function ensureCoreTables() {
       CONSTRAINT fk_analysis_project FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
   `;
+
+  // Backfill columns if the table existed without new fields
+  await sql`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS user_id TEXT;`;
+  await sql`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS project_id TEXT;`;
+  await sql`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_analysis_user'
+      ) THEN
+        ALTER TABLE analyses
+        ADD CONSTRAINT fk_analysis_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_analysis_project'
+      ) THEN
+        ALTER TABLE analyses
+        ADD CONSTRAINT fk_analysis_project FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `;
 }
