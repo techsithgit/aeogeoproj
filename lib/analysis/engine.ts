@@ -12,7 +12,7 @@ import {
   RecommendedFix,
 } from "./types";
 
-const ANALYSIS_VERSION: AnalysisVersion = "v2";
+const ANALYSIS_VERSION: AnalysisVersion = "v3";
 
 type TopicSignals = {
   normalized: string;

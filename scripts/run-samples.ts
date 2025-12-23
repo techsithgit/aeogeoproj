@@ -1,6 +1,6 @@
 import { createAnalysisId, generateAnalysis } from "../lib/analysis/engine";
 
-const samples: { source: { type: "topic" | "url"; value: string }; context?: { location?: string; industry?: string }; topicHint?: string }[] = [
+const samples: { source: { type: "topic" | "url"; value: string }; context?: { location?: string; industry?: string }; topicHint?: string; includeDifferentiators?: boolean }[] = [
   { source: { type: "topic", value: "best project management tool for remote teams" }, context: { industry: "software" } },
   { source: { type: "topic", value: "how to pick a data warehouse" }, context: { industry: "analytics" } },
   { source: { type: "topic", value: "coffee shops near me" } },
@@ -16,6 +16,7 @@ function run() {
       source: sample.source,
       topicHint: sample.topicHint ?? sample.source.value,
       context: sample.context ?? {},
+      includeDifferentiators: sample.includeDifferentiators ?? true,
     });
     // eslint-disable-next-line no-console
     console.log(`\nSample ${index + 1}: ${sample.source.value}`);

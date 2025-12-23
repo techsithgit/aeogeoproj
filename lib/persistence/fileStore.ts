@@ -63,7 +63,15 @@ function syncMemoryFromDisk() {
 syncMemoryFromDisk();
 
 export class FileAnalysisStore implements AnalysisStore {
-  async createRecord(id: string, source: AnalysisSource, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
+  async createRecord(
+    id: string,
+    source: AnalysisSource,
+    context: AnalysisContext,
+    status: AnalysisStatus,
+    _userId?: string,
+    projectId?: string,
+    includeDifferentiators?: boolean
+  ): Promise<AnalysisRecord> {
     const now = new Date().toISOString();
     const record: AnalysisRecord = {
       id,
@@ -73,6 +81,8 @@ export class FileAnalysisStore implements AnalysisStore {
       request: {
         source,
         context,
+        include_differentiators: includeDifferentiators,
+        project_id: projectId,
       },
     };
     globalStore.memory.set(id, record);

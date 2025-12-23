@@ -1,4 +1,4 @@
-export type AnalysisVersion = "v1" | "v2";
+export type AnalysisVersion = "v1" | "v2" | "v3";
 
 export type AnalysisSource = {
   type: "topic" | "url";
@@ -144,10 +144,13 @@ export type AnalysisRecord = {
   status: AnalysisStatus;
   created_at: string;
   updated_at: string;
+  user_id?: string;
+  project_id?: string;
   request: {
     source: AnalysisSource;
     context: AnalysisContext;
     include_differentiators?: boolean;
+    project_id?: string;
   };
   analysis?: Analysis;
   error?: string;

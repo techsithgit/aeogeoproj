@@ -17,7 +17,15 @@ function validateKvEnv() {
 }
 
 export class VercelKVStore implements AnalysisStore {
-  async createRecord(id: string, source: AnalysisSource, context: AnalysisContext, status: AnalysisStatus): Promise<AnalysisRecord> {
+  async createRecord(
+    id: string,
+    source: AnalysisSource,
+    context: AnalysisContext,
+    status: AnalysisStatus,
+    _userId?: string,
+    projectId?: string,
+    includeDifferentiators?: boolean
+  ): Promise<AnalysisRecord> {
     validateKvEnv();
     const now = new Date().toISOString();
     const record: AnalysisRecord = {
@@ -25,7 +33,7 @@ export class VercelKVStore implements AnalysisStore {
       status,
       created_at: now,
       updated_at: now,
-      request: { source, context },
+      request: { source, context, include_differentiators: includeDifferentiators, project_id: projectId },
     };
     await kv.set(key(id), record);
     return record;
