@@ -3,8 +3,10 @@ import GoogleProvider from "next-auth/providers/google";
 import { sql } from "@vercel/postgres";
 import crypto from "crypto";
 import { PLAN_LIMITS } from "@/lib/auth/plans";
+import { ensureCoreTables } from "@/lib/db/schema";
 
 async function ensureUser(email: string) {
+  await ensureCoreTables();
   const lowerEmail = email.toLowerCase();
   const existing = await sql`SELECT id, plan, analyses_used_this_month, last_reset_at FROM users WHERE email = ${lowerEmail} LIMIT 1;`;
   if (existing.rows.length) {
