@@ -58,11 +58,14 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.userId as string;
-        session.user.plan = token.plan as string;
-        session.user.analyses_used_this_month = token.analyses_used_this_month as number;
-        session.user.last_reset_at = token.last_reset_at as string | null;
-        session.user.allow_differentiators = token.allow_differentiators as boolean | undefined;
+        session.user = {
+          ...session.user,
+          id: token.userId as string,
+          plan: token.plan as string,
+          analyses_used_this_month: token.analyses_used_this_month as number,
+          last_reset_at: (token.last_reset_at as string | null) ?? null,
+          allow_differentiators: token.allow_differentiators as boolean | undefined,
+        };
       }
       return session;
     },
