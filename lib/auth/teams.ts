@@ -30,14 +30,14 @@ export function hasRole(membership: TeamMembership | undefined, minRole: TeamRol
 }
 
 export async function ensureTeamAccess(userId: string, teamId: string, minRole: TeamRole): Promise<TeamMembership> {
-  const { rows } = await sql`
+  const { rows } = await sql<{ team_id: string; user_id: string; role: TeamRole; name: string }>`
     SELECT tm.team_id, tm.user_id, tm.role, t.name
     FROM team_memberships tm
     JOIN teams t ON t.id = tm.team_id
     WHERE tm.user_id = ${userId} AND tm.team_id = ${teamId}
     LIMIT 1;
   `;
-  const membership = rows[0];
+  const membership = rows[0] as TeamMembership | undefined;
   if (!membership || !hasRole(membership, minRole)) {
     throw new Error("Unauthorized");
   }
