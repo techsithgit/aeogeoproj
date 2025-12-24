@@ -18,7 +18,13 @@ export type EventName =
   | "share_link_created"
   | "share_link_revoked"
   | "share_link_viewed"
-  | "feedback_submitted";
+  | "feedback_submitted"
+  | "team_created"
+  | "member_invited"
+  | "member_joined"
+  | "member_removed"
+  | "role_changed"
+  | "analysis_run_by_role";
 
 export type EventProps = {
   source_type?: "topic" | "url";
@@ -32,6 +38,8 @@ export type EventProps = {
   feedback?: "up" | "down";
   export_type?: "pdf";
   differentiators_included?: boolean;
+  team_id?: string;
+  role?: string;
 };
 
 type RecordEventArgs = {

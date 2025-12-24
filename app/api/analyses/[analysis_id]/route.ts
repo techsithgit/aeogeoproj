@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/session";
 import { ensureCoreTables } from "@/lib/db/schema";
 import { sql } from "@vercel/postgres";
 import { recordEvent } from "@/lib/telemetry/events";
+import { ensureTeamAccess } from "@/lib/auth/teams";
 
 type Params = Promise<{
   analysis_id: string;
@@ -17,9 +18,14 @@ export async function GET(_request: NextRequest, context: { params: Params }) {
     const store = getAnalysisStore();
     const record = await store.getRecord(analysis_id);
 
-    if (!record || record.user_id !== user.id) {
+    if (!record) {
       return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
     }
+    const projectRow = await sql`SELECT team_id FROM projects WHERE id = ${record.project_id} LIMIT 1;`;
+    if (!projectRow.rows.length) {
+      return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
+    }
+    await ensureTeamAccess(user.id, projectRow.rows[0].team_id, "viewer");
 
     await recordEvent({
       event_name: "analysis_viewed",
@@ -72,10 +78,13 @@ export async function DELETE(_request: NextRequest, context: { params: Params })
     await ensureCoreTables();
     const user = await requireUser();
     const { analysis_id } = await context.params;
-    const { rows } = await sql`SELECT id FROM analyses WHERE id = ${analysis_id} AND user_id = ${user.id} LIMIT 1;`;
+    const { rows } = await sql`SELECT id, project_id FROM analyses WHERE id = ${analysis_id} LIMIT 1;`;
     if (!rows.length) {
       return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
     }
+    const proj = await sql`SELECT team_id FROM projects WHERE id = ${rows[0].project_id} LIMIT 1;`;
+    if (!proj.rows.length) return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
+    await ensureTeamAccess(user.id, proj.rows[0].team_id, "member");
     await sql`DELETE FROM analyses WHERE id = ${analysis_id};`;
     await recordEvent({
       event_name: "analysis_failed",

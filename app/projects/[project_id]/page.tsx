@@ -3,6 +3,7 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useParams } from "next/navigation";
 import SignedInStatus from "@/components/SignedInStatus";
+import TeamMembers from "@/components/TeamMembers";
 
 type AnalysisListItem = {
   id: string;
@@ -14,6 +15,8 @@ type AnalysisListItem = {
 type Project = {
   id: string;
   name: string;
+  team_id?: string;
+  team_name?: string;
 };
 
 export default function ProjectDetailPage() {
@@ -27,12 +30,21 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
+  const [role, setRole] = useState<string>("");
 
   const load = async () => {
     const projRes = await fetch(`/api/projects/${project_id}`);
     if (projRes.ok) {
       const data = await projRes.json();
       setProject(data.project);
+      if (data.project?.team_id) {
+        const teamRes = await fetch(`/api/teams/${data.project.team_id}`);
+        if (teamRes.ok) {
+          const teamData = await teamRes.json();
+          setRole(teamData.current_role || "");
+          setProject((prev) => (prev ? { ...prev, team_name: teamData.team?.name } : prev));
+        }
+      }
     }
     const res = await fetch(`/api/projects/${project_id}/analyses`);
     if (res.ok) {
@@ -73,8 +85,17 @@ export default function ProjectDetailPage() {
   return (
     <main style={{ padding: "1.5rem" }}>
       <h1>{project?.name ?? "Project"}</h1>
+      {project?.team_id && (
+        <p>
+          Team: {project.team_name ?? project.team_id} {role ? `(you are ${role})` : ""}
+        </p>
+      )}
       <SignedInStatus />
-      <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "540px" }}>
+      {project?.team_id && <TeamMembers teamId={project.team_id} />}
+      <form
+        onSubmit={submit}
+        style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "540px" }}
+      >
         <label>
           Source type
           <select value={mode} onChange={(e) => setMode(e.target.value as "topic" | "url")} style={{ padding: "0.4rem", marginTop: "0.25rem" }}>
@@ -96,7 +117,9 @@ export default function ProjectDetailPage() {
           Include differentiators (if plan allows)
         </label>
         {error && <p style={{ color: "red" }}>{error}</p>}
-        <button type="submit" style={{ padding: "0.6rem 1rem" }}>{loading ? "Running..." : "Run analysis"}</button>
+        <button type="submit" style={{ padding: "0.6rem 1rem" }} disabled={role === "viewer"}>
+          {loading ? "Running..." : role === "viewer" ? "View only" : "Run analysis"}
+        </button>
       </form>
 
       <section style={{ marginTop: "1.5rem" }}>
@@ -112,6 +135,7 @@ export default function ProjectDetailPage() {
                     {a.request.source.type}: {a.request.source.value} ({a.status})
                   </a>
                   <button
+                    disabled={role === "viewer"}
                     onClick={async () => {
                       await fetch(`/api/analyses/${a.id}`, { method: "DELETE" });
                       load();
@@ -121,6 +145,7 @@ export default function ProjectDetailPage() {
                     Delete
                   </button>
                   <button
+                    disabled={role === "viewer"}
                     onClick={async () => {
                       const res = await fetch(`/api/analyses/${a.id}/export`, { method: "POST" });
                       const data = await res.json();
@@ -135,6 +160,7 @@ export default function ProjectDetailPage() {
                     Export PDF
                   </button>
                   <button
+                    disabled={role === "viewer"}
                     onClick={async () => {
                       const res = await fetch(`/api/analyses/${a.id}/share`, { method: "POST" });
                       const data = await res.json();
@@ -149,6 +175,7 @@ export default function ProjectDetailPage() {
                     Share link
                   </button>
                   <button
+                    disabled={role === "viewer"}
                     onClick={async () => {
                       await fetch(`/api/analyses/${a.id}/share`, { method: "DELETE" });
                       setShareLinks((prev) => {

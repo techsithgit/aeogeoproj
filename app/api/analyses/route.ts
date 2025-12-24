@@ -9,6 +9,7 @@ import { allowDifferentiators, incrementUsage, resetUsageIfNeeded } from "@/lib/
 import { PLAN_LIMITS } from "@/lib/auth/plans";
 import { recordEvent, latencyBucket, getHostname } from "@/lib/telemetry/events";
 import { sql } from "@vercel/postgres";
+import { ensureTeamAccess } from "@/lib/auth/teams";
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,10 +41,11 @@ export async function POST(request: NextRequest) {
     if (!project_id) {
       return NextResponse.json({ error: "project_id is required" }, { status: 400 });
     }
-    const projectCheck = await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${user.id} LIMIT 1;`;
+    const projectCheck = await sql`SELECT id, team_id FROM projects WHERE id = ${project_id} LIMIT 1;`;
     if (!projectCheck.rows.length) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
+    const membership = await ensureTeamAccess(user.id, projectCheck.rows[0].team_id, "member");
 
     const context: AnalysisContext = body?.context ?? {};
     const id = createAnalysisId();
@@ -76,7 +78,17 @@ export async function POST(request: NextRequest) {
         source_type: source.type,
         include_differentiators: includeDifferentiatorsRequested,
         hostname: source.type === "url" ? getHostname(source.value) : undefined,
+        role: membership.role,
+        team_id: projectCheck.rows[0].team_id,
       },
+    });
+    await recordEvent({
+      event_name: "analysis_run_by_role",
+      user_id: user.id,
+      plan: user.plan,
+      project_id,
+      analysis_id: id,
+      properties: { role: membership.role, team_id: projectCheck.rows[0].team_id, source_type: source.type },
     });
     if (includeDifferentiatorsRequested) {
       await recordEvent({
@@ -155,6 +167,8 @@ export async function POST(request: NextRequest) {
         analysis_status: analysis.status,
         latency_bucket: latency,
         hostname: source.type === "url" ? getHostname(source.value) : undefined,
+        role: membership.role,
+        team_id: projectCheck.rows[0].team_id,
       },
     });
 

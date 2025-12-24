@@ -5,6 +5,7 @@ import { ensureCoreTables } from "@/lib/db/schema";
 import { requireUser } from "@/lib/auth/session";
 import { PLAN_LIMITS } from "@/lib/auth/plans";
 import { recordEvent } from "@/lib/telemetry/events";
+import { ensureTeamAccess } from "@/lib/auth/teams";
 
 type Params = Promise<{ analysis_id: string }>;
 
@@ -18,14 +19,16 @@ export async function POST(_req: NextRequest, context: { params: Params }) {
     }
     const { analysis_id } = await context.params;
     const analysis = await sql`
-      SELECT id, project_id, status
-      FROM analyses
-      WHERE id = ${analysis_id} AND user_id = ${user.id}
+      SELECT a.id, a.project_id, a.status, p.team_id
+      FROM analyses a
+      JOIN projects p ON p.id = a.project_id
+      WHERE a.id = ${analysis_id}
       LIMIT 1;
     `;
     if (!analysis.rows.length) {
       return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
     }
+    await ensureTeamAccess(user.id, analysis.rows[0].team_id, "member");
     if (analysis.rows[0].status !== "complete") {
       return NextResponse.json({ error: "Analysis is not complete" }, { status: 400 });
     }
@@ -42,6 +45,7 @@ export async function POST(_req: NextRequest, context: { params: Params }) {
       plan: user.plan,
       project_id: analysis.rows[0].project_id,
       analysis_id,
+      properties: { team_id: analysis.rows[0].team_id },
     });
     return NextResponse.json({ share_url: `/share/${token}`, token });
   } catch (error) {
@@ -57,14 +61,16 @@ export async function DELETE(_req: NextRequest, context: { params: Params }) {
     const user = await requireUser();
     const { analysis_id } = await context.params;
     const analysis = await sql`
-      SELECT id, project_id
-      FROM analyses
-      WHERE id = ${analysis_id} AND user_id = ${user.id}
+      SELECT a.id, a.project_id, p.team_id
+      FROM analyses a
+      JOIN projects p ON p.id = a.project_id
+      WHERE a.id = ${analysis_id}
       LIMIT 1;
     `;
     if (!analysis.rows.length) {
       return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
     }
+    await ensureTeamAccess(user.id, analysis.rows[0].team_id, "member");
     await sql`UPDATE share_links SET enabled = false, revoked_at = NOW() WHERE analysis_id = ${analysis_id};`;
     await recordEvent({
       event_name: "share_link_revoked",
@@ -72,6 +78,7 @@ export async function DELETE(_req: NextRequest, context: { params: Params }) {
       plan: user.plan,
       project_id: analysis.rows[0].project_id,
       analysis_id,
+      properties: { team_id: analysis.rows[0].team_id },
     });
     return NextResponse.json({ status: "ok" });
   } catch (error) {

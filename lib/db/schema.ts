@@ -13,6 +13,41 @@ export async function ensureCoreTables() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS team_memberships (
+      team_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (team_id, user_id),
+      CONSTRAINT fk_team FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE,
+      CONSTRAINT fk_team_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS team_invites (
+      token TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      accepted_at TIMESTAMPTZ,
+      accepted_by TEXT,
+      created_by TEXT NOT NULL,
+      CONSTRAINT fk_invite_team FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE
+    );
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -25,13 +60,28 @@ export async function ensureCoreTables() {
   await sql`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
+      user_id TEXT,
+      team_id TEXT,
       name TEXT NOT NULL,
       primary_domain TEXT,
       industry TEXT,
       created_at TIMESTAMPTZ NOT NULL,
-      CONSTRAINT fk_project_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      CONSTRAINT fk_project_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_project_team FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE
     );
+  `;
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_id TEXT;`;
+  await sql`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_project_team'
+      ) THEN
+        ALTER TABLE projects
+        ADD CONSTRAINT fk_project_team FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE;
+      END IF;
+    END $$;
   `;
 
   await sql`
@@ -118,5 +168,25 @@ export async function ensureCoreTables() {
       CONSTRAINT fk_export_analysis FOREIGN KEY(analysis_id) REFERENCES analyses(id) ON DELETE CASCADE,
       CONSTRAINT fk_export_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+  `;
+
+  // Create personal teams for users missing membership and backfill projects
+  await sql`
+    INSERT INTO teams (id, name, created_at)
+    SELECT 'team-' || u.id, u.email || ' team', NOW()
+    FROM users u
+    WHERE NOT EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = u.id)
+  `;
+  await sql`
+    INSERT INTO team_memberships (team_id, user_id, role, created_at)
+    SELECT 'team-' || u.id, u.id, 'owner', NOW()
+    FROM users u
+    WHERE NOT EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.user_id = u.id)
+    ON CONFLICT DO NOTHING;
+  `;
+  await sql`
+    UPDATE projects p
+    SET team_id = 'team-' || p.user_id
+    WHERE team_id IS NULL AND p.user_id IS NOT NULL;
   `;
 }

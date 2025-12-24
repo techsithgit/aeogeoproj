@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth/session";
 import { PLAN_LIMITS } from "@/lib/auth/plans";
 import { recordEvent } from "@/lib/telemetry/events";
 import { getAnalysisStore } from "@/lib/persistence";
+import { ensureTeamAccess } from "@/lib/auth/teams";
 
 type Params = Promise<{ analysis_id: string }>;
 
@@ -20,9 +21,12 @@ export async function POST(_req: NextRequest, context: { params: Params }) {
     const { analysis_id } = await context.params;
     const store = getAnalysisStore();
     const record = await store.getRecord(analysis_id);
-    if (!record || record.user_id !== user.id) {
+    if (!record) {
       return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
     }
+    const proj = await sql`SELECT team_id FROM projects WHERE id = ${record.project_id} LIMIT 1;`;
+    if (!proj.rows.length) return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
+    await ensureTeamAccess(user.id, proj.rows[0].team_id, "member");
     if (record.status !== "complete" || !record.analysis) {
       return NextResponse.json({ error: "Analysis is not complete" }, { status: 400 });
     }
@@ -40,6 +44,7 @@ export async function POST(_req: NextRequest, context: { params: Params }) {
       properties: {
         export_type: "pdf",
         differentiators_included: Boolean(record.request.include_differentiators),
+        team_id: proj.rows[0].team_id,
       },
     });
     return NextResponse.json({ export_id: exportId, download_url: `/api/analyses/${analysis_id}/export/${exportId}` });

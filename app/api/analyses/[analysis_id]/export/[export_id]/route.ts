@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { ensureCoreTables } from "@/lib/db/schema";
 import { requireUser } from "@/lib/auth/session";
-import { PLAN_LIMITS } from "@/lib/auth/plans";
 import { getAnalysisStore } from "@/lib/persistence";
 import { generateAnalysisPdf } from "@/lib/pdf/generate";
 import { recordEvent } from "@/lib/telemetry/events";
 import type { Analysis } from "@/lib/analysis/types";
+import { ensureTeamAccess } from "@/lib/auth/teams";
+import { PLAN_LIMITS } from "@/lib/auth/plans";
 
 type Params = Promise<{ analysis_id: string; export_id: string }>;
 
@@ -29,18 +30,21 @@ export async function GET(_req: NextRequest, context: { params: Params }) {
     `;
 
     const exportRow = rows[0];
-    if (!exportRow || exportRow.user_id !== user.id) {
+    if (!exportRow) {
       return NextResponse.json({ error: "Export not found" }, { status: 404 });
     }
+    const proj = await sql`SELECT team_id FROM projects WHERE id = ${exportRow.project_id} LIMIT 1;`;
+    if (!proj.rows.length) return NextResponse.json({ error: "Export not found" }, { status: 404 });
+    await ensureTeamAccess(user.id, proj.rows[0].team_id, "member");
 
     const store = getAnalysisStore();
     const record = await store.getRecord(analysis_id);
-    if (!record || record.user_id !== user.id || record.status !== "complete" || !record.analysis) {
+    if (!record || record.status !== "complete" || !record.analysis) {
       return NextResponse.json({ error: "Analysis not available" }, { status: 404 });
     }
 
     const analysis = record.analysis as Analysis;
-    const includeDifferentiators = limits.allow_differentiators && Boolean(record.request.include_differentiators);
+    const includeDifferentiators = Boolean(record.request.include_differentiators);
     const pdfBuffer = await generateAnalysisPdf(analysis, includeDifferentiators);
     const pdfBody = new Uint8Array(pdfBuffer);
 
@@ -53,6 +57,7 @@ export async function GET(_req: NextRequest, context: { params: Params }) {
       properties: {
         export_type: "pdf",
         differentiators_included: includeDifferentiators && Boolean(analysis.differentiators),
+        team_id: proj.rows[0].team_id,
       },
     }).catch(() => {});
 

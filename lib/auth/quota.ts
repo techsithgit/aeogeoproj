@@ -1,5 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { PLAN_LIMITS, PlanType } from "./plans";
+import { enforceTeamLimits } from "./teams";
 import { AuthUser } from "./session";
 
 function sameMonth(a: Date, b: Date): boolean {
@@ -44,4 +45,8 @@ export function enforceAnalysisQuota(user: AuthUser) {
 export function allowDifferentiators(user: AuthUser): boolean {
   const limits = PLAN_LIMITS[user.plan as PlanType];
   return limits.allow_differentiators;
+}
+
+export async function enforceTeamQuota(user: AuthUser) {
+  await enforceTeamLimits(user);
 }
