@@ -14,10 +14,11 @@ export async function GET() {
     const memberships = await listMemberships(user.id);
     const teamIds = memberships.map((m) => m.team_id);
     if (teamIds.length === 0) return NextResponse.json({ projects: [] });
+    const teamArrayLiteral = `{${teamIds.join(",")}}`;
     const { rows } = await sql`
       SELECT id, name, primary_domain, industry, created_at, team_id
       FROM projects
-      WHERE team_id = ANY(${teamIds}::text[])
+      WHERE team_id = ANY(${teamArrayLiteral}::text[])
       ORDER BY created_at DESC;
     `;
     return NextResponse.json({ projects: rows });
