@@ -1,11 +1,26 @@
 import PDFDocument from "pdfkit";
+import fs from "fs";
+import path from "path";
 import { Analysis } from "@/lib/analysis/types";
 
 export function generateAnalysisPdf(analysis: Analysis, includeDifferentiators: boolean): Buffer {
+  const fontsPath = path.join(process.cwd(), "lib", "pdf", "fonts");
+  const helveticaPath = path.join(fontsPath, "Helvetica.afm");
+
+  // Point pdfkit to bundled font data to avoid missing AFM in serverless
+  const PDFKitAny = PDFDocument as unknown as { PDFFont?: { dataPath?: string } };
+  if (PDFKitAny.PDFFont) {
+    PDFKitAny.PDFFont.dataPath = fontsPath;
+  }
+
   const doc = new PDFDocument({ margin: 50 });
   const chunks: Buffer[] = [];
   doc.on("data", (c) => chunks.push(c as Buffer));
   doc.on("end", () => {});
+
+  // Explicitly register Helvetica so pdfkit can find the font data in serverless bundles
+  doc.registerFont("Helvetica", fs.readFileSync(helveticaPath));
+  doc.font("Helvetica");
 
   doc.fontSize(18).text("AEO/GEO Analysis", { underline: true });
   doc.moveDown();

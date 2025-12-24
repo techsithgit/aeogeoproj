@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getServerSession } from "next-auth/next";
+import AdminPlanForm from "@/components/AdminPlanForm";
 
 type SummaryRow = { event_name: string; count: number };
 
@@ -159,6 +160,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { days
           ))}
         </ul>
       </section>
+      <AdminPlanForm />
     </main>
   );
 }
