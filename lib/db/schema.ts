@@ -72,4 +72,21 @@ export async function ensureCoreTables() {
       END IF;
     END $$;
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS events (
+      id TEXT PRIMARY KEY,
+      event_name TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      project_id TEXT,
+      analysis_id TEXT,
+      plan TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      properties JSONB
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_events_user_created_at ON events (user_id, created_at DESC);`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_events_name_created_at ON events (event_name, created_at DESC);`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_events_project_created_at ON events (project_id, created_at DESC);`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_events_analysis ON events (analysis_id);`;
 }

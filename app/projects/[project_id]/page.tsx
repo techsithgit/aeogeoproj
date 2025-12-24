@@ -107,19 +107,72 @@ export default function ProjectDetailPage() {
         ) : (
           <ul>
             {analyses.map((a) => (
-              <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <a href={`/api/analyses/${a.id}`} target="_blank" rel="noreferrer">
-                  {a.request.source.type}: {a.request.source.value} ({a.status})
-                </a>
-                <button
-                  onClick={async () => {
-                    await fetch(`/api/analyses/${a.id}`, { method: "DELETE" });
-                    load();
+              <li key={a.id} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <a href={`/api/analyses/${a.id}`} target="_blank" rel="noreferrer">
+                    {a.request.source.type}: {a.request.source.value} ({a.status})
+                  </a>
+                  <button
+                    onClick={async () => {
+                      await fetch(`/api/analyses/${a.id}`, { method: "DELETE" });
+                      load();
+                    }}
+                    style={{ padding: "0.3rem 0.6rem" }}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await fetch(`/api/analyses/${a.id}/export-intent`, { method: "POST" });
+                      alert("Export intent recorded (feature not implemented).");
+                    }}
+                    style={{ padding: "0.3rem 0.6rem" }}
+                  >
+                    Export (intent)
+                  </button>
+                </div>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const target = e.currentTarget;
+                    const formData = new FormData(target);
+                    const feedback = formData.get("feedback") as string;
+                    const helpful_part = formData.get("helpful_part") as string;
+                    await fetch(`/api/analyses/${a.id}/feedback`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        feedback,
+                        helpful_part: helpful_part || undefined,
+                      }),
+                    });
+                    target.reset();
                   }}
-                  style={{ padding: "0.3rem 0.6rem" }}
+                  style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}
                 >
-                  Delete
-                </button>
+                  <label>
+                    <select name="feedback" required defaultValue="">
+                      <option value="" disabled>
+                        Feedback
+                      </option>
+                      <option value="up">👍 Helpful</option>
+                      <option value="down">👎 Not helpful</option>
+                    </select>
+                  </label>
+                  <label>
+                    <select name="helpful_part" defaultValue="">
+                      <option value="">Most helpful part (optional)</option>
+                      <option value="prompts">Prompts</option>
+                      <option value="why_not_answer">Why not answer</option>
+                      <option value="fixes">Fixes</option>
+                      <option value="differentiators">Differentiators</option>
+                      <option value="scoring">Scoring</option>
+                    </select>
+                  </label>
+                  <button type="submit" style={{ padding: "0.3rem 0.6rem" }}>
+                    Submit
+                  </button>
+                </form>
               </li>
             ))}
           </ul>

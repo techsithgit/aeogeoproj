@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { requireUser } from "@/lib/auth/session";
 import { ensureCoreTables } from "@/lib/db/schema";
 import { enforceProjectQuota, resetUsageIfNeeded } from "@/lib/auth/quota";
+import { recordEvent } from "@/lib/telemetry/events";
 
 export async function GET() {
   try {
@@ -29,13 +30,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Project name is required." }, { status: 400 });
     }
     const countRes = await sql`SELECT COUNT(*)::int AS count FROM projects WHERE user_id = ${user.id};`;
-    enforceProjectQuota(user, countRes.rows[0].count);
+    try {
+      enforceProjectQuota(user, countRes.rows[0].count);
+    } catch (err) {
+      await recordEvent({
+        event_name: "quota_exceeded",
+        user_id: user.id,
+        plan: user.plan,
+        properties: { error_code: "project_limit" },
+      });
+      throw err;
+    }
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await sql`
       INSERT INTO projects (id, user_id, name, primary_domain, industry, created_at)
       VALUES (${id}, ${user.id}, ${name}, ${primary_domain}, ${industry}, ${now});
     `;
+    await recordEvent({
+      event_name: "project_created",
+      user_id: user.id,
+      plan: user.plan,
+      project_id: id,
+    });
     return NextResponse.json({ project_id: id, status: "ok" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create project";
