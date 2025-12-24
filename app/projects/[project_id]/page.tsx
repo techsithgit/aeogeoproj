@@ -1,7 +1,10 @@
 "use client";
 
+"use client";
+
 import { useEffect, useState, FormEvent } from "react";
 import { useParams } from "next/navigation";
+import SignedInStatus from "@/components/SignedInStatus";
 
 type AnalysisListItem = {
   id: string;
@@ -71,6 +74,7 @@ export default function ProjectDetailPage() {
   return (
     <main style={{ padding: "1.5rem" }}>
       <h1>{project?.name ?? "Project"}</h1>
+      <SignedInStatus />
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "540px" }}>
         <label>
           Source type
@@ -103,10 +107,19 @@ export default function ProjectDetailPage() {
         ) : (
           <ul>
             {analyses.map((a) => (
-              <li key={a.id}>
+              <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <a href={`/api/analyses/${a.id}`} target="_blank" rel="noreferrer">
                   {a.request.source.type}: {a.request.source.value} ({a.status})
                 </a>
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/analyses/${a.id}`, { method: "DELETE" });
+                    load();
+                  }}
+                  style={{ padding: "0.3rem 0.6rem" }}
+                >
+                  Delete
+                </button>
               </li>
             ))}
           </ul>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, FormEvent } from "react";
+import SignedInStatus from "@/components/SignedInStatus";
 
 type Project = {
   id: string;
@@ -57,6 +58,7 @@ export default function ProjectsPage() {
   return (
     <main style={{ padding: "1.5rem" }}>
       <h1>Projects</h1>
+      <SignedInStatus />
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "420px" }}>
         <label>
           Name
