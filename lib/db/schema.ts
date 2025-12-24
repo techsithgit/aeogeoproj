@@ -100,9 +100,12 @@ export async function ensureCoreTables() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       revoked_at TIMESTAMPTZ,
       CONSTRAINT fk_share_analysis FOREIGN KEY(analysis_id) REFERENCES analyses(id) ON DELETE CASCADE,
-      CONSTRAINT fk_share_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      CONSTRAINT fk_share_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT share_links_analysis_unique UNIQUE (analysis_id)
     );
   `;
+  // Ensure the unique constraint exists for ON CONFLICT (analysis_id)
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS share_links_analysis_id_key ON share_links(analysis_id);`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS exports (

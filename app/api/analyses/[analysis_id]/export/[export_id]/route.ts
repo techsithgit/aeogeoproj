@@ -41,7 +41,7 @@ export async function GET(_req: NextRequest, context: { params: Params }) {
 
     const analysis = record.analysis as Analysis;
     const includeDifferentiators = limits.allow_differentiators && Boolean(record.request.include_differentiators);
-    const pdfBuffer = generateAnalysisPdf(analysis, includeDifferentiators);
+    const pdfBuffer = await generateAnalysisPdf(analysis, includeDifferentiators);
     const pdfBody = new Uint8Array(pdfBuffer);
 
     await recordEvent({

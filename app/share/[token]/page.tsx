@@ -17,8 +17,10 @@ type ShareRecord = {
   extraction_status?: "success" | "partial" | "failed" | null;
 };
 
-export default async function SharePage({ params }: { params: { token: string } }) {
-  const { token } = params;
+type Params = Promise<{ token: string }>;
+
+export default async function SharePage({ params }: { params: Params }) {
+  const { token } = await params;
   const { rows } = await sql<ShareRecord>`
     SELECT
       a.analysis,
@@ -42,6 +44,7 @@ export default async function SharePage({ params }: { params: { token: string } 
   const allowDiff = rec.plan !== "free" && rec.include_differentiators;
   const blockingReasons = analysis?.diagnosis?.blocking_reasons ?? [];
   const recommendedFixes = analysis?.fixes?.recommended_fixes ?? [];
+  const diff = analysis?.differentiators;
 
   // Fire-and-forget telemetry
   recordEvent({
@@ -95,12 +98,59 @@ export default async function SharePage({ params }: { params: { token: string } 
           </ul>
         )}
       </section>
-      {allowDiff && analysis?.differentiators && (
+      {allowDiff && diff && (
         <section>
           <h2>Differentiators</h2>
-          <pre style={{ whiteSpace: "pre-wrap", background: "#f5f5f5", padding: "1rem" }}>
-            {JSON.stringify(analysis.differentiators, null, 2)}
-          </pre>
+          {diff.answer_fragility && (
+            <div style={{ marginBottom: "0.75rem" }}>
+              <strong>Answer fragility:</strong> {diff.answer_fragility.status} (score {diff.answer_fragility.fragility_score})
+              {diff.answer_fragility.drivers?.length ? (
+                <ul>
+                  {diff.answer_fragility.drivers.slice(0, 3).map((d) => (
+                    <li key={`${d.driver_type}-${d.explanation.slice(0, 24)}`}>{d.driver_type}: {d.explanation}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )}
+
+          {diff.citation_profile && (
+            <div style={{ marginBottom: "0.75rem" }}>
+              <strong>Citation type:</strong> {diff.citation_profile.current_type} ({diff.citation_profile.confidence_level} confidence)
+              {diff.citation_profile.requirements_to_upgrade?.length ? (
+                <div>
+                  Upgrade path: {diff.citation_profile.requirements_to_upgrade[0].target_type} — missing {diff.citation_profile.requirements_to_upgrade[0].missing_signals.join(", ")}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {diff.first_party_signals && (
+            <div style={{ marginBottom: "0.75rem" }}>
+              <strong>First-party signals:</strong> {diff.first_party_signals.presence}
+              {diff.first_party_signals.detected_types?.length ? (
+                <div>Detected: {diff.first_party_signals.detected_types.join(", ")}</div>
+              ) : null}
+              {diff.first_party_signals.gaps?.length ? <div>Gaps: {diff.first_party_signals.gaps.join(", ")}</div> : null}
+            </div>
+          )}
+
+          {diff.geo_sensitivity && (
+            <div style={{ marginBottom: "0.75rem" }}>
+              <strong>Geo sensitivity:</strong> {diff.geo_sensitivity.level} — {diff.geo_sensitivity.explanation}. Implications: {diff.geo_sensitivity.implications}
+            </div>
+          )}
+
+          {diff.fix_priority?.ordered_fixes?.length ? (
+            <div>
+              <strong>Fix priority:</strong>
+              <ul>
+                {diff.fix_priority.ordered_fixes.slice(0, 5).map((f) => (
+                  <li key={`${f.fix_id}-${f.priority}`}>{f.priority.toUpperCase()}: fix {f.fix_id} ({f.rationale})</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       )}
     </main>
