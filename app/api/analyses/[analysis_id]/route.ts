@@ -77,6 +77,13 @@ export async function DELETE(_request: NextRequest, context: { params: Params })
       return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
     }
     await sql`DELETE FROM analyses WHERE id = ${analysis_id};`;
+    await recordEvent({
+      event_name: "analysis_failed",
+      user_id: user.id,
+      plan: user.plan,
+      analysis_id,
+      properties: { error_code: "deleted" },
+    });
     return NextResponse.json({ status: "ok" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to delete analysis";

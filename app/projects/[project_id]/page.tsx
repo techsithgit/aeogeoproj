@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useEffect, useState, FormEvent } from "react";
 import { useParams } from "next/navigation";
 import SignedInStatus from "@/components/SignedInStatus";
@@ -28,6 +26,7 @@ export default function ProjectDetailPage() {
   const [includeDiff, setIncludeDiff] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
 
   const load = async () => {
     const projRes = await fetch(`/api/projects/${project_id}`);
@@ -123,14 +122,54 @@ export default function ProjectDetailPage() {
                   </button>
                   <button
                     onClick={async () => {
-                      await fetch(`/api/analyses/${a.id}/export-intent`, { method: "POST" });
-                      alert("Export intent recorded (feature not implemented).");
+                      const res = await fetch(`/api/analyses/${a.id}/export`, { method: "POST" });
+                      const data = await res.json();
+                      if (!res.ok) {
+                        alert(data.error || "Export failed");
+                        return;
+                      }
+                      window.open(data.download_url, "_blank");
                     }}
                     style={{ padding: "0.3rem 0.6rem" }}
                   >
-                    Export (intent)
+                    Export PDF
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch(`/api/analyses/${a.id}/share`, { method: "POST" });
+                      const data = await res.json();
+                      if (!res.ok) {
+                        alert(data.error || "Unable to create share link");
+                        return;
+                      }
+                      setShareLinks((prev) => ({ ...prev, [a.id]: data.share_url }));
+                    }}
+                    style={{ padding: "0.3rem 0.6rem" }}
+                  >
+                    Share link
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await fetch(`/api/analyses/${a.id}/share`, { method: "DELETE" });
+                      setShareLinks((prev) => {
+                        const next = { ...prev };
+                        delete next[a.id];
+                        return next;
+                      });
+                    }}
+                    style={{ padding: "0.3rem 0.6rem" }}
+                  >
+                    Revoke share
                   </button>
                 </div>
+                {shareLinks[a.id] && (
+                  <div style={{ fontSize: "0.9rem" }}>
+                    Share URL:{" "}
+                    <a href={shareLinks[a.id]} target="_blank" rel="noreferrer">
+                      {shareLinks[a.id]}
+                    </a>
+                  </div>
+                )}
                 <form
                   onSubmit={async (e) => {
                     e.preventDefault();

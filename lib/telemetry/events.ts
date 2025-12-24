@@ -13,6 +13,11 @@ export type EventName =
   | "differentiators_blocked_by_plan"
   | "quota_exceeded"
   | "export_requested"
+  | "export_generated"
+  | "export_downloaded"
+  | "share_link_created"
+  | "share_link_revoked"
+  | "share_link_viewed"
   | "feedback_submitted";
 
 export type EventProps = {
@@ -25,6 +30,8 @@ export type EventProps = {
   hostname?: string;
   helpful_part?: "prompts" | "why_not_answer" | "fixes" | "differentiators" | "scoring";
   feedback?: "up" | "down";
+  export_type?: "pdf";
+  differentiators_included?: boolean;
 };
 
 type RecordEventArgs = {

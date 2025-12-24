@@ -46,6 +46,26 @@ async function getQuotaFriction(days: number) {
   `;
 }
 
+async function getShareStats(days: number) {
+  return sql`
+    SELECT event_name, COUNT(*)::int AS count
+    FROM events
+    WHERE event_name IN ('share_link_created','share_link_revoked','share_link_viewed')
+    AND created_at >= NOW() - (${days}::text || ' days')::interval
+    GROUP BY event_name;
+  `;
+}
+
+async function getExportStats(days: number) {
+  return sql`
+    SELECT event_name, COUNT(*)::int AS count
+    FROM events
+    WHERE event_name IN ('export_requested','export_generated','export_downloaded')
+    AND created_at >= NOW() - (${days}::text || ' days')::interval
+    GROUP BY event_name;
+  `;
+}
+
 export default async function AdminPage({ searchParams }: { searchParams: { days?: string } }) {
   const session = await getServerSession(authOptions);
   const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
@@ -63,6 +83,8 @@ export default async function AdminPage({ searchParams }: { searchParams: { days
   const funnel = await getFunnel(days);
   const diffIntent = await getDiffIntent(days);
   const quotaFriction = await getQuotaFriction(days);
+  const shareStats = await getShareStats(days);
+  const exportStats = await getExportStats(days);
 
   return (
     <main style={{ padding: "1.5rem" }}>
@@ -113,6 +135,26 @@ export default async function AdminPage({ searchParams }: { searchParams: { days
           {quotaFriction.rows.map((row) => (
             <li key={row.plan}>
               {row.plan}: {row.count}
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section>
+        <h2>Sharing (last {days} days)</h2>
+        <ul>
+          {shareStats.rows.map((row) => (
+            <li key={row.event_name}>
+              {row.event_name}: {row.count}
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section>
+        <h2>Exports (last {days} days)</h2>
+        <ul>
+          {exportStats.rows.map((row) => (
+            <li key={row.event_name}>
+              {row.event_name}: {row.count}
             </li>
           ))}
         </ul>

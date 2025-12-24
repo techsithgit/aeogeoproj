@@ -89,4 +89,31 @@ export async function ensureCoreTables() {
   await sql`CREATE INDEX IF NOT EXISTS idx_events_name_created_at ON events (event_name, created_at DESC);`;
   await sql`CREATE INDEX IF NOT EXISTS idx_events_project_created_at ON events (project_id, created_at DESC);`;
   await sql`CREATE INDEX IF NOT EXISTS idx_events_analysis ON events (analysis_id);`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS share_links (
+      id TEXT PRIMARY KEY,
+      analysis_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      revoked_at TIMESTAMPTZ,
+      CONSTRAINT fk_share_analysis FOREIGN KEY(analysis_id) REFERENCES analyses(id) ON DELETE CASCADE,
+      CONSTRAINT fk_share_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS exports (
+      id TEXT PRIMARY KEY,
+      analysis_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      export_type TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_by TEXT NOT NULL,
+      CONSTRAINT fk_export_analysis FOREIGN KEY(analysis_id) REFERENCES analyses(id) ON DELETE CASCADE,
+      CONSTRAINT fk_export_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `;
 }
