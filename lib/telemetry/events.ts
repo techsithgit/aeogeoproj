@@ -52,9 +52,10 @@ export async function recordEvent({
   properties = {},
 }: RecordEventArgs) {
   const event_id = crypto.randomUUID();
+  const propsJson = JSON.stringify(properties);
   await sql`
     INSERT INTO events (id, event_name, user_id, project_id, analysis_id, plan, created_at, properties)
-    VALUES (${event_id}, ${event_name}, ${user_id}, ${project_id ?? null}, ${analysis_id ?? null}, ${plan}, NOW(), ${sql.json(properties)})
+    VALUES (${event_id}, ${event_name}, ${user_id}, ${project_id ?? null}, ${analysis_id ?? null}, ${plan}, NOW(), ${propsJson}::jsonb)
   `;
 }
 
