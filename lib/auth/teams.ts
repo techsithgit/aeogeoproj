@@ -14,14 +14,14 @@ export type TeamMembership = {
 const ROLE_ORDER: TeamRole[] = ["viewer", "member", "owner"];
 
 export async function listMemberships(userId: string): Promise<TeamMembership[]> {
-  const { rows } = await sql`
+  const { rows } = await sql<{ team_id: string; user_id: string; role: TeamRole; name: string }>`
     SELECT tm.team_id, tm.user_id, tm.role, t.name
     FROM team_memberships tm
     JOIN teams t ON t.id = tm.team_id
     WHERE tm.user_id = ${userId}
     ORDER BY t.created_at ASC;
   `;
-  return rows;
+  return rows as TeamMembership[];
 }
 
 export function hasRole(membership: TeamMembership | undefined, minRole: TeamRole): boolean {
