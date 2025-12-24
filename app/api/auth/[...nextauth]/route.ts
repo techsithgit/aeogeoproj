@@ -1,9 +1,23 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { sql } from "@vercel/postgres";
 import crypto from "crypto";
 import { PLAN_LIMITS } from "@/lib/auth/plans";
 import { ensureCoreTables } from "@/lib/db/schema";
+
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password: string, stored: string): boolean {
+  if (!stored) return false;
+  const [salt, hash] = stored.split(":");
+  const hashed = crypto.scryptSync(password, salt, 64).toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(hashed, "hex"));
+}
 
 async function ensureUser(email: string) {
   await ensureCoreTables();
@@ -28,6 +42,38 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    }),
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials.password) return null;
+        const email = credentials.email.toLowerCase().trim();
+        const password = credentials.password;
+        await ensureCoreTables();
+        const { rows } = await sql`SELECT id, password_hash, plan, analyses_used_this_month, last_reset_at FROM users WHERE email = ${email} LIMIT 1;`;
+        if (!rows.length) {
+          const id = crypto.randomUUID();
+          const now = new Date().toISOString();
+          const password_hash = hashPassword(password);
+          await sql`
+            INSERT INTO users (id, email, password_hash, plan, analyses_used_this_month, last_reset_at)
+            VALUES (${id}, ${email}, ${password_hash}, 'free', 0, ${now})
+          `;
+          return { id, email };
+        }
+        const user = rows[0];
+        if (!user.password_hash) {
+          const newHash = hashPassword(password);
+          await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${user.id};`;
+        } else if (!verifyPassword(password, user.password_hash)) {
+          return null;
+        }
+        return { id: user.id, email };
+      },
     }),
   ],
   session: {
