@@ -54,7 +54,7 @@ export async function recordEvent({
   const event_id = crypto.randomUUID();
   await sql`
     INSERT INTO events (id, event_name, user_id, project_id, analysis_id, plan, created_at, properties)
-    VALUES (${event_id}, ${event_name}, ${user_id}, ${project_id ?? null}, ${analysis_id ?? null}, ${plan}, NOW(), ${properties})
+    VALUES (${event_id}, ${event_name}, ${user_id}, ${project_id ?? null}, ${analysis_id ?? null}, ${plan}, NOW(), ${sql.json(properties)})
   `;
 }
 
