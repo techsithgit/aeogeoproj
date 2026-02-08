@@ -54,7 +54,11 @@ export async function enforceTeamLimits(user: AuthUser) {
 
 export async function enforceMemberLimit(teamId: string, plan: PlanType) {
   const limits = PLAN_LIMITS[plan];
-  const { rows } = await sql`SELECT COUNT(*)::int AS count FROM team_memberships WHERE team_id = ${teamId};`;
+  const { rows } = await sql`
+    SELECT COUNT(*)::int AS count
+    FROM team_memberships
+    WHERE team_id = ${teamId} AND role IN ('owner','member');
+  `;
   if (rows[0].count >= limits.max_members_per_team) {
     throw new Error("Member limit exceeded for plan");
   }
@@ -74,12 +78,45 @@ export async function getDefaultTeamId(userId: string): Promise<string | null> {
 
 export async function getTeamPlan(teamId: string): Promise<PlanType | null> {
   const { rows } = await sql`
-    SELECT u.plan
-    FROM team_memberships tm
-    JOIN users u ON u.id = tm.user_id
-    WHERE tm.team_id = ${teamId} AND tm.role = 'owner'
-    ORDER BY tm.created_at ASC
+    SELECT plan
+    FROM teams
+    WHERE id = ${teamId}
     LIMIT 1;
   `;
   return rows[0]?.plan ?? null;
+}
+
+export async function getTeamBilling(teamId: string): Promise<{
+  plan: PlanType;
+  included_seats: number;
+  purchased_seats: number;
+  subscription_status?: string | null;
+  seat_limit: number;
+  seat_usage: number;
+}> {
+  const teamRes = await sql`
+    SELECT plan, included_seats, purchased_seats, subscription_status
+    FROM teams
+    WHERE id = ${teamId}
+    LIMIT 1;
+  `;
+  const team = teamRes.rows[0];
+  const plan = (team?.plan as PlanType) ?? "free";
+  const included_seats = team?.included_seats ?? PLAN_LIMITS[plan].included_seats;
+  const purchased_seats = team?.purchased_seats ?? 0;
+  const seat_limit = included_seats + purchased_seats;
+  const usageRes = await sql`
+    SELECT COUNT(*)::int AS count
+    FROM team_memberships
+    WHERE team_id = ${teamId} AND role IN ('owner','member');
+  `;
+  const seat_usage = usageRes.rows[0]?.count ?? 0;
+  return {
+    plan,
+    included_seats,
+    purchased_seats,
+    subscription_status: team?.subscription_status ?? null,
+    seat_limit,
+    seat_usage,
+  };
 }

@@ -13,6 +13,9 @@ export default function Home() {
       <p>
         Once signed in, go to <Link href="/projects">Projects</Link> to create a project and run analyses.
       </p>
+      <p>
+        Team owners can manage plans in <Link href="/billing">Billing</Link>.
+      </p>
     </main>
   );
 }

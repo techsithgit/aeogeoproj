@@ -23,6 +23,7 @@ export default function ProjectDetailPage() {
   const { project_id } = useParams<{ project_id: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [analyses, setAnalyses] = useState<AnalysisListItem[]>([]);
+  const [seatInfo, setSeatInfo] = useState<{ seat_usage: number; seat_limit: number; plan: string; status?: string } | null>(null);
   const [mode, setMode] = useState<"topic" | "url">("topic");
   const [topic, setTopic] = useState("");
   const [url, setUrl] = useState("");
@@ -43,6 +44,11 @@ export default function ProjectDetailPage() {
           const teamData = await teamRes.json();
           setRole(teamData.current_role || "");
           setProject((prev) => (prev ? { ...prev, team_name: teamData.team?.name } : prev));
+        }
+        const billingRes = await fetch(`/api/billing/status?team_id=${data.project.team_id}`);
+        if (billingRes.ok) {
+          const bill = await billingRes.json();
+          setSeatInfo({ seat_usage: bill.seat_usage, seat_limit: bill.seat_limit, plan: bill.plan, status: bill.subscription_status });
         }
       }
     }
@@ -87,7 +93,8 @@ export default function ProjectDetailPage() {
       <h1>{project?.name ?? "Project"}</h1>
       {project?.team_id && (
         <p>
-          Team: {project.team_name ?? project.team_id} {role ? `(you are ${role})` : ""}
+          Team: {project.team_name ?? project.team_id} {role ? `(you are ${role})` : ""}{" "}
+          {seatInfo ? `— Seats: ${seatInfo.seat_usage}/${seatInfo.seat_limit} (${seatInfo.plan}${seatInfo.status ? `:${seatInfo.status}` : ""})` : ""}
         </p>
       )}
       <SignedInStatus />
